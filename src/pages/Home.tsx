@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LoaderCircle, LocateFixed } from 'lucide-react';
+import { Bookmark, LoaderCircle, LocateFixed } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import PlaceDialog from '@/components/PlaceDialog';
@@ -30,6 +30,12 @@ let nextPointKey = 0;
 function createPoint(place: Place | null = null): RoutePoint {
   nextPointKey += 1;
   return { key: nextPointKey, place };
+}
+
+function getLocationError(error: GeolocationPositionError | Error) {
+  return 'code' in error && error.code === error.PERMISSION_DENIED
+    ? 'Нет доступа к местоположению. Разрешите его в настройках браузера.'
+    : 'Не удалось определить местоположение. Попробуйте ещё раз.';
 }
 
 function formatDuration(minutes: number) {
@@ -77,7 +83,9 @@ export default function Home() {
             : [{ ...current[0], place }, ...current.slice(1)],
         );
       })
-      .catch(() => {})
+      .catch((error) => {
+        if (!isCancelled) setLocationError(getLocationError(error));
+      })
       .finally(() => {
         if (!isCancelled) setIsLocating(false);
       });
@@ -106,6 +114,9 @@ export default function Home() {
   const isLoading = routeKey !== '' && !isCurrent;
   const hasFailed = isCurrent && !route;
   const hasStops = places.length > 2;
+  const unsavedPlace = places.findLast(
+    ({ lat, lon }) => !savedPlaces.some(({ place }) => place.lat === lat && place.lon === lon),
+  );
   const offers = useMemo(
     () => (route && first && last ? getOffers(route, first, last) : []),
     [route, first, last],
@@ -130,13 +141,7 @@ export default function Home() {
       .then((place) => {
         setPoints((current) => [{ ...current[0], place }, ...current.slice(1)]);
       })
-      .catch((error: GeolocationPositionError | Error) => {
-        setLocationError(
-          'code' in error && error.code === error.PERMISSION_DENIED
-            ? 'Нет доступа к местоположению. Разрешите его в настройках браузера.'
-            : 'Не удалось определить местоположение. Попробуйте ещё раз.',
-        );
-      })
+      .catch((error) => setLocationError(getLocationError(error)))
       .finally(() => setIsLocating(false));
   }
 
@@ -157,11 +162,6 @@ export default function Home() {
   function savePlace(saved: SavedPlace) {
     const others = savedPlaces.filter(({ name }) => name !== saved.name && name !== dialog?.name);
     updateSavedPlaces([...others, saved]);
-  }
-
-  function openPlaceDialog(place: Place) {
-    const saved = savedPlaces.find((item) => item.place.title === place.title);
-    setDialog({ name: saved?.name, place: saved?.place ?? place });
   }
 
   return (
@@ -185,21 +185,17 @@ export default function Home() {
       </div>
 
       <main className="relative z-20 mx-auto mt-[calc(48dvh-1.5rem)] flex min-h-[calc(52dvh+1.5rem)] max-w-xl flex-col gap-4 rounded-t-3xl bg-background px-4 pt-5 pb-8">
-        <div
-          onInput={() => {
+        <RoutePoints
+          points={points}
+          isLocating={isLocating}
+          near={first ?? undefined}
+          savedPlaces={savedPlaces}
+          onChange={setPoints}
+          onAdd={addStop}
+          onFirstFieldInput={() => {
             hasTypedRef.current = true;
           }}
-        >
-          <RoutePoints
-            points={points}
-            isLocating={isLocating}
-            near={first ?? undefined}
-            savedPlaces={savedPlaces}
-            onChange={setPoints}
-            onAdd={addStop}
-            onSave={openPlaceDialog}
-          />
-        </div>
+        />
 
         {locationError && <p className="text-sm text-destructive">{locationError}</p>}
 
@@ -221,6 +217,16 @@ export default function Home() {
             <p className="text-sm font-medium">
               {route.distanceKm.toFixed(1)} км · примерно {formatDuration(route.durationMin)} в пути
             </p>
+            {unsavedPlace && (
+              <button
+                type="button"
+                onClick={() => setDialog({ place: unsavedPlace })}
+                className="-my-1 flex w-full items-center gap-2 rounded-lg py-1 text-left text-sm font-medium text-primary focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Bookmark className="size-4 shrink-0" />
+                <span className="truncate">Сохранить адрес: {unsavedPlace.title}</span>
+              </button>
+            )}
             {hasStops && (
               <p className="text-sm text-muted-foreground">
                 Остановки в заказ не передаются: добавьте их в приложении сервиса или скажите

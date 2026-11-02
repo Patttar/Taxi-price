@@ -70,7 +70,7 @@ function PointRow({
       layout="position"
       className="flex items-start gap-1 bg-background"
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1" onInput={index === 0 ? onFirstFieldInput : undefined}>
         <AddressInput
           label={label}
           placeholder={getPlaceholder(index, count, isLocating)}
@@ -98,8 +98,7 @@ function PointRow({
           }
           place={place}
           near={near}
-          isSaved={savedPlaces.some((saved) => saved.place.title === place?.title)}
-          onSave={place ? () => onSave(place) : undefined}
+          savedPlaces={savedPlaces}
           onAdd={onAdd}
           onChange={onChange}
         />
@@ -127,7 +126,7 @@ type Props = {
   savedPlaces: SavedPlace[];
   onChange: (points: RoutePoint[]) => void;
   onAdd: () => void;
-  onSave: (place: Place) => void;
+  onFirstFieldInput: () => void;
 };
 
 export default function RoutePoints({
@@ -137,7 +136,7 @@ export default function RoutePoints({
   savedPlaces,
   onChange,
   onAdd,
-  onSave,
+  onFirstFieldInput,
 }: Props) {
   function move(index: number, shift: number) {
     const target = index + shift;
@@ -172,8 +171,8 @@ export default function RoutePoints({
           }
           onMove={(shift) => move(index, shift)}
           onRemove={() => onChange(points.filter((item) => item !== point))}
-          onSave={onSave}
           onAdd={index === points.length - 1 && points.length < MAX_POINTS ? onAdd : undefined}
+          onFirstFieldInput={onFirstFieldInput}
         />
       ))}
     </Reorder.Group>
