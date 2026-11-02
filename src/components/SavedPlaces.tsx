@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { ChevronRight, Plus } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { getPlaceIcon, type SavedPlace } from '@/lib/savedPlaces';
 
@@ -9,25 +9,20 @@ const CHIP_CLASS =
 type Props = {
   places: SavedPlace[];
   onSelect: (saved: SavedPlace) => void;
-  onEdit: (saved: SavedPlace) => void;
   onAdd: () => void;
 };
 
-export default function SavedPlaces({ places, onSelect, onEdit, onAdd }: Props) {
-  const [isEditing, setIsEditing] = useState(false);
-
+export default function SavedPlaces({ places, onSelect, onAdd }: Props) {
   return (
     <section className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm text-muted-foreground">Мои адреса</h2>
-        <button
-          type="button"
-          onClick={() => setIsEditing(!isEditing)}
-          className="text-sm font-medium text-primary"
-        >
-          {isEditing ? 'Готово' : 'Изменить'}
-        </button>
-      </div>
+      <Link
+        to="/places"
+        aria-label="Все адреса"
+        className="flex items-center justify-between gap-3 rounded-lg pr-4 text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <h2 className="text-sm">Мои адреса</h2>
+        <ChevronRight className="size-5 shrink-0" />
+      </Link>
 
       <ul className="flex flex-wrap gap-2">
         {places.map((saved) => {
@@ -37,12 +32,11 @@ export default function SavedPlaces({ places, onSelect, onEdit, onAdd }: Props) 
               <button
                 type="button"
                 title={saved.place.title}
-                onClick={() => (isEditing ? onEdit(saved) : onSelect(saved))}
+                onClick={() => onSelect(saved)}
                 className={`${CHIP_CLASS} max-w-full bg-accent text-primary hover:bg-accent/70`}
               >
                 <Icon className="size-4 shrink-0" />
                 <span className="truncate">{saved.name}</span>
-                {isEditing && <Pencil className="size-3.5 shrink-0" />}
               </button>
             </li>
           );

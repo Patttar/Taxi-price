@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { LoaderCircle, Plus, X, type LucideIcon } from 'lucide-react';
+import { Bookmark, LoaderCircle, Plus, X, type LucideIcon } from 'lucide-react';
 
 import { normalize, resolvePlace, searchPlaces, type Coordinates, type Place } from '@/lib/geo';
 import { getPlaceIcon, type SavedPlace } from '@/lib/savedPlaces';
@@ -15,6 +15,7 @@ type Props = {
   place: Place | null;
   near?: Coordinates;
   savedPlaces?: SavedPlace[];
+  onSave?: () => void;
   onAdd?: () => void;
   onChange: (place: Place | null) => void;
 };
@@ -76,6 +77,7 @@ export default function AddressInput({
   place,
   near,
   savedPlaces = [],
+  onSave,
   onAdd,
   onChange,
 }: Props) {
@@ -138,16 +140,17 @@ export default function AddressInput({
     setText(selected.title);
     setSuggestions([]);
     setIsOpen(false);
-    if (icon) {
-      onChange(selected);
-      return;
+
+    let resolved = selected;
+    if (!icon) {
+      setIsResolving(true);
+      resolved = await resolvePlace(selected);
+      if (request !== selectionRef.current) return;
+      setIsResolving(false);
     }
 
-    setIsResolving(true);
-    const resolved = await resolvePlace(selected);
-    if (request !== selectionRef.current) return;
-    setIsResolving(false);
     onChange(resolved);
+    inputRef.current?.blur();
   }
 
   const saved = place || isResolving ? [] : findSaved(savedPlaces, query);
@@ -222,6 +225,11 @@ export default function AddressInput({
           <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" />
         )}
         <span className="-mr-2 flex shrink-0 empty:hidden">
+          {place && onSave && (
+            <FieldButton label={`Сохранить адрес из поля «${label}»`} onClick={onSave}>
+              <Bookmark className="size-5" />
+            </FieldButton>
+          )}
           {place && onAdd && (
             <FieldButton label="Добавить остановку" onClick={onAdd}>
               <Plus className="size-5" />

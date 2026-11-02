@@ -39,6 +39,19 @@ export function loadSavedPlaces(): SavedPlace[] {
   }
 }
 
+export function isPlaceSaved(places: SavedPlace[], { lat, lon }: Place) {
+  return places.some(({ place }) => place.lat === lat && place.lon === lon);
+}
+
+export function replaceSavedPlace(
+  places: SavedPlace[],
+  saved: SavedPlace,
+  previousName?: string,
+): SavedPlace[] {
+  const others = places.filter(({ name }) => name !== saved.name && name !== previousName);
+  return [...others, saved];
+}
+
 export function storeSavedPlaces(places: SavedPlace[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(places));

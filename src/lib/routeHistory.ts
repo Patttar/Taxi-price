@@ -5,7 +5,7 @@ export type SavedRoute = { points: Place[]; at: number };
 type StoredRoute = Partial<SavedRoute> & { from?: Place; to?: Place };
 
 const STORAGE_KEY = 'taxi.route-history';
-const RECENT_LIMIT = 5;
+const RECENT_LIMIT = 3;
 const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 
 function getRouteKey({ points }: SavedRoute) {

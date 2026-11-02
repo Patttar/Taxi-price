@@ -3,7 +3,7 @@ import { GripVertical, MapPin, Trash2 } from 'lucide-react';
 
 import AddressInput from '@/components/AddressInput';
 import type { Coordinates, Place } from '@/lib/geo';
-import type { SavedPlace } from '@/lib/savedPlaces';
+import { isPlaceSaved, type SavedPlace } from '@/lib/savedPlaces';
 
 export type RoutePoint = { key: number; place: Place | null };
 
@@ -14,12 +14,14 @@ type RowProps = {
   index: number;
   count: number;
   isLocating: boolean;
+  isExpanded: boolean;
   near?: Coordinates;
   savedPlaces: SavedPlace[];
   onChange: (place: Place | null) => void;
   onMove: (shift: number) => void;
   onRemove: () => void;
   onAdd?: () => void;
+  onSave: (place: Place) => void;
   onFirstFieldInput: () => void;
 };
 
@@ -49,12 +51,14 @@ function PointRow({
   index,
   count,
   isLocating,
+  isExpanded,
   near,
   savedPlaces,
   onChange,
   onMove,
   onRemove,
   onAdd,
+  onSave,
   onFirstFieldInput,
 }: RowProps) {
   const controls = useDragControls();
@@ -68,7 +72,10 @@ function PointRow({
       dragListener={false}
       dragControls={controls}
       layout="position"
-      className="flex items-start gap-1 bg-background"
+      // Анимация сдвига при открытии шторки сбивает прокрутку к полю.
+      transition={{ layout: { duration: isExpanded ? 0 : 0.2 } }}
+      data-point-key={point.key}
+      className="flex scroll-mt-16 items-start gap-1 bg-background"
     >
       <div className="min-w-0 flex-1" onInput={index === 0 ? onFirstFieldInput : undefined}>
         <AddressInput
@@ -99,6 +106,7 @@ function PointRow({
           place={place}
           near={near}
           savedPlaces={savedPlaces}
+          onSave={place && !isPlaceSaved(savedPlaces, place) ? () => onSave(place) : undefined}
           onAdd={onAdd}
           onChange={onChange}
         />
@@ -122,20 +130,24 @@ function PointRow({
 type Props = {
   points: RoutePoint[];
   isLocating: boolean;
+  isExpanded: boolean;
   near?: Coordinates;
   savedPlaces: SavedPlace[];
   onChange: (points: RoutePoint[]) => void;
   onAdd: () => void;
+  onSave: (place: Place) => void;
   onFirstFieldInput: () => void;
 };
 
 export default function RoutePoints({
   points,
   isLocating,
+  isExpanded,
   near,
   savedPlaces,
   onChange,
   onAdd,
+  onSave,
   onFirstFieldInput,
 }: Props) {
   function move(index: number, shift: number) {
@@ -155,7 +167,7 @@ export default function RoutePoints({
       onReorder={(keys: number[]) =>
         onChange(keys.map((key) => points.find((point) => point.key === key)!))
       }
-      className="relative z-10 flex flex-col gap-2"
+      className="relative flex flex-col gap-2 focus-within:z-10"
     >
       {points.map((point, index) => (
         <PointRow
@@ -164,6 +176,7 @@ export default function RoutePoints({
           index={index}
           count={points.length}
           isLocating={isLocating}
+          isExpanded={isExpanded}
           near={near}
           savedPlaces={savedPlaces}
           onChange={(place) =>
@@ -172,6 +185,7 @@ export default function RoutePoints({
           onMove={(shift) => move(index, shift)}
           onRemove={() => onChange(points.filter((item) => item !== point))}
           onAdd={index === points.length - 1 && points.length < MAX_POINTS ? onAdd : undefined}
+          onSave={onSave}
           onFirstFieldInput={onFirstFieldInput}
         />
       ))}

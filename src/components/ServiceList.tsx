@@ -50,11 +50,13 @@ export default function ServiceList({ offers }: { offers: Offer[] }) {
               </div>
             )}
 
-            <div className={cn('grid gap-2', offer.phone && 'grid-cols-2')}>
-              <a className={ACTION_CLASS} href={offer.link.href} target="_blank" rel="noreferrer">
-                <ExternalLink className="size-4" />
-                {offer.link.label}
-              </a>
+            <div className={cn('grid gap-2', offer.link && offer.phone && 'grid-cols-2')}>
+              {offer.link && (
+                <a className={ACTION_CLASS} href={offer.link.href} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-4" />
+                  {offer.link.label}
+                </a>
+              )}
               {offer.phone && (
                 <a className={ACTION_CLASS} href={offer.phone.href}>
                   <Phone className="size-4" />

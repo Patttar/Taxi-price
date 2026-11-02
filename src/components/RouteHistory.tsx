@@ -2,10 +2,12 @@ import { ChevronRight, History } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import type { SavedRoute } from '@/lib/routeHistory';
+import { cn } from '@/lib/utils';
 
 type RowProps = {
   route: SavedRoute;
   time?: string;
+  className?: string;
   onSelect: (route: SavedRoute) => void;
 };
 
@@ -14,7 +16,7 @@ function formatStops(count: number) {
   return `${count} остановки`;
 }
 
-export function RouteRow({ route, time, onSelect }: RowProps) {
+export function RouteRow({ route, time, className, onSelect }: RowProps) {
   const { points } = route;
   const stops = points.length - 2;
 
@@ -22,7 +24,10 @@ export function RouteRow({ route, time, onSelect }: RowProps) {
     <button
       type="button"
       onClick={() => onSelect(route)}
-      className="flex w-full items-center gap-3 rounded-2xl bg-muted px-4 py-3 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+      className={cn(
+        'flex w-full items-center gap-3 rounded-2xl bg-muted px-4 py-3 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
+        className,
+      )}
     >
       <History className="size-5 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1">
@@ -50,17 +55,23 @@ type Props = {
 
 export default function RouteHistory({ routes, onSelect }: Props) {
   return (
-    <section className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm text-muted-foreground">Недавние маршруты</h2>
-        <Link to="/history" className="text-sm font-medium text-primary">
-          Все
-        </Link>
-      </div>
-      <ul className="flex flex-col gap-2">
+    <section className="flex flex-col rounded-2xl bg-muted py-2">
+      <Link
+        to="/history"
+        aria-label="Все маршруты"
+        className="flex items-center justify-between gap-3 rounded-lg px-4 py-1.5 text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <h2 className="text-sm">Недавние маршруты</h2>
+        <ChevronRight className="size-5 shrink-0" />
+      </Link>
+      <ul className="flex flex-col">
         {routes.map((route) => (
           <li key={route.at}>
-            <RouteRow route={route} onSelect={onSelect} />
+            <RouteRow
+              route={route}
+              className="rounded-none bg-transparent py-2.5"
+              onSelect={onSelect}
+            />
           </li>
         ))}
       </ul>

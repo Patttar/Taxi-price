@@ -14,11 +14,11 @@ type Service = {
   tariffName: string;
   tariff: Tariff;
   phone?: { href: string; label: string };
-  getLink: (from: Place, to: Place) => { href: string; label: string };
+  getLink?: (from: Place, to: Place) => { href: string; label: string };
 };
 
 export type Offer = Pick<Service, 'name' | 'tariffName' | 'phone'> & {
-  link: { href: string; label: string };
+  link?: { href: string; label: string };
   price: number;
 };
 
@@ -57,7 +57,7 @@ const SERVICES: Service[] = [
       const isApple = /iPhone|iPad|iPod/.test(navigator.userAgent);
       return {
         href: isApple
-          ? 'https://apps.apple.com/app/id6755240054'
+          ? 'https://apps.apple.com/by/app/id6755240054'
           : 'https://play.google.com/store/apps/details?id=com.wb.taxi.client',
         label: 'Приложение',
       };
@@ -69,15 +69,6 @@ const SERVICES: Service[] = [
     // Опубликован только загородный тариф 0,69 Br/км, городские значения условные.
     tariff: { minimum: 2.5, includedKm: 1.5, includedMin: 3, perKm: 0.5, perMin: 0.2, outOfTownPerKm: 0.69 },
     phone: { href: 'tel:+375295656666', label: 'Позвонить' },
-    getLink: () => ({ href: 'https://citytaxi.by/', label: 'На сайт' }),
-  },
-  {
-    name: 'Максим',
-    tariffName: 'Эконом',
-    // Опубликованного тарифа нет, значения условные.
-    tariff: { minimum: 2.6, includedKm: 1.5, includedMin: 3, perKm: 0.55, perMin: 0.2, outOfTownPerKm: 1.1 },
-    phone: { href: 'tel:7003', label: 'Позвонить' },
-    getLink: () => ({ href: 'https://taximaxim.by/', label: 'На сайт' }),
   },
 ];
 
@@ -98,7 +89,7 @@ export function getOffers(route: Route, from: Place, to: Place): Offer[] {
     name,
     tariffName,
     phone,
-    link: getLink(from, to),
+    link: getLink?.(from, to),
     price: getPrice(route, tariff),
   })).sort((a, b) => a.price - b.price);
 }

@@ -5,6 +5,7 @@ import { Dialog } from 'radix-ui';
 import AddressInput from '@/components/AddressInput';
 import type { Place } from '@/lib/geo';
 import { PLACE_PRESETS, type SavedPlace } from '@/lib/savedPlaces';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { cn } from '@/lib/utils';
 
 const MAX_NAME_LENGTH = 24;
@@ -14,7 +15,7 @@ type Props = {
   initialPlace: Place | null;
   places: SavedPlace[];
   onSave: (saved: SavedPlace) => void;
-  onDelete: () => void;
+  onDelete?: () => void;
   onClose: () => void;
 };
 
@@ -28,6 +29,7 @@ export default function PlaceDialog({
 }: Props) {
   const [place, setPlace] = useState(initialPlace);
   const [name, setName] = useState(initialName);
+  const keyboardInset = useKeyboardInset();
 
   const trimmedName = name.trim();
   const isPreset = PLACE_PRESETS.some((preset) => preset.name === name);
@@ -37,11 +39,15 @@ export default function PlaceDialog({
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40" />
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/50 animate-in fade-in-0" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed inset-x-4 top-[8dvh] z-50 mx-auto flex max-w-md flex-col gap-4 rounded-3xl bg-background p-5 shadow-lg"
+          style={{ bottom: keyboardInset }}
+          onOpenAutoFocus={(event) => initialPlace && event.preventDefault()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+          className="fixed inset-x-0 z-50 mx-auto flex max-h-[90dvh] max-w-xl flex-col gap-4 rounded-t-3xl bg-background px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-lg animate-in slide-in-from-bottom duration-200"
         >
+          <div aria-hidden className="mx-auto h-1 w-10 shrink-0 rounded-full bg-border" />
           <Dialog.Title className="text-lg font-semibold">
             {initialName ? 'Изменить адрес' : 'Сохранить адрес'}
           </Dialog.Title>

@@ -1,17 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bookmark, LoaderCircle, LocateFixed } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type FocusEvent } from 'react';
+import { ArrowLeft, LoaderCircle, LocateFixed } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import PlaceDialog from '@/components/PlaceDialog';
 import RouteHistory from '@/components/RouteHistory';
 import RouteMap from '@/components/RouteMap';
 import RoutePoints, { type RoutePoint } from '@/components/RoutePoints';
+import RouteStats from '@/components/RouteStats';
 import SavedPlaces from '@/components/SavedPlaces';
 import ServiceList from '@/components/ServiceList';
 import { fetchRoute, locateUser, type Place, type Route } from '@/lib/geo';
 import { getOffers } from '@/lib/prices';
 import { addToRouteHistory, getRecentRoutes, loadRouteHistory } from '@/lib/routeHistory';
-import { loadSavedPlaces, storeSavedPlaces, type SavedPlace } from '@/lib/savedPlaces';
+import {
+  loadSavedPlaces,
+  replaceSavedPlace,
+  storeSavedPlaces,
+  type SavedPlace,
+} from '@/lib/savedPlaces';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
+import { cn } from '@/lib/utils';
 
 type RouteResult = {
   key: string;
@@ -19,11 +27,11 @@ type RouteResult = {
 };
 
 type DialogState = {
-  name?: string;
   place: Place | null;
 };
 
 const HISTORY_DELAY_MS = 3000;
+const APPLY_BAR_HEIGHT = 76;
 
 let nextPointKey = 0;
 
@@ -38,10 +46,14 @@ function getLocationError(error: GeolocationPositionError | Error) {
     : 'Не удалось определить местоположение. Попробуйте ещё раз.';
 }
 
-function formatDuration(minutes: number) {
-  const rounded = Math.max(Math.round(minutes), 1);
-  const hours = Math.floor(rounded / 60);
-  return hours > 0 ? `${hours} ч ${rounded % 60} мин` : `${rounded} мин`;
+// Экран стоит в верхней точке, пока поле там видно над клавиатурой и кнопкой.
+function revealField(field: HTMLElement | null) {
+  if (!field?.contains(document.activeElement)) return;
+
+  const visibleHeight = (window.visualViewport?.height ?? window.innerHeight) - APPLY_BAR_HEIGHT;
+  const bottomFromTop = field.getBoundingClientRect().bottom + window.scrollY;
+  if (bottomFromTop <= visibleHeight) window.scrollTo(0, 0);
+  else field.scrollIntoView({ block: 'start' });
 }
 
 export default function Home() {
@@ -59,7 +71,10 @@ export default function Home() {
   const [history, setHistory] = useState(loadRouteHistory);
   const [savedPlaces, setSavedPlaces] = useState(loadSavedPlaces);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const keyboardInset = useKeyboardInset();
   const hasTypedRef = useRef(false);
+  const activeFieldRef = useRef<HTMLElement | null>(null);
 
   const places = useMemo(() => points.flatMap(({ place }) => (place ? [place] : [])), [points]);
   const first = points[0].place;
@@ -114,9 +129,6 @@ export default function Home() {
   const isLoading = routeKey !== '' && !isCurrent;
   const hasFailed = isCurrent && !route;
   const hasStops = places.length > 2;
-  const unsavedPlace = places.findLast(
-    ({ lat, lon }) => !savedPlaces.some(({ place }) => place.lat === lat && place.lon === lon),
-  );
   const offers = useMemo(
     () => (route && first && last ? getOffers(route, first, last) : []),
     [route, first, last],
@@ -125,14 +137,41 @@ export default function Home() {
 
   // Промежуточные варианты при перетаскивании и правке адресов в историю не попадают.
   useEffect(() => {
-    if (!route) return;
+    if (!route || isExpanded) return;
 
     const timer = setTimeout(() => {
       setHistory((current) => addToRouteHistory(current, JSON.parse(routeKey) as Place[]));
     }, HISTORY_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [route, routeKey]);
+  }, [route, routeKey, isExpanded]);
+
+  // Клавиатура телефона появляется уже после фокуса и сдвигает видимую область.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!isExpanded || !viewport) return;
+
+    const reveal = () => revealField(activeFieldRef.current);
+    viewport.addEventListener('resize', reveal);
+    return () => viewport.removeEventListener('resize', reveal);
+  }, [isExpanded]);
+
+  function handleFieldFocus(event: FocusEvent<HTMLDivElement>) {
+    if (!(event.target instanceof HTMLInputElement)) return;
+
+    const field = event.target.closest('li');
+    activeFieldRef.current = field;
+    setIsExpanded(true);
+    // Поля встают на новое место только на следующем кадре после открытия шторки.
+    requestAnimationFrame(() => requestAnimationFrame(() => revealField(field)));
+  }
+
+  function collapse() {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    activeFieldRef.current = null;
+    setIsExpanded(false);
+    window.scrollTo(0, 0);
+  }
 
   function locate() {
     setLocationError('');
@@ -149,24 +188,24 @@ export default function Home() {
     setPoints((current) => [...current.slice(0, -1), createPoint(), current.at(-1)!]);
   }
 
-  function goTo(place: Place) {
-    setPoints((current) => [...current.slice(0, -1), { ...current.at(-1)!, place }]);
+  function fillActiveField(place: Place) {
+    const activeKey = Number(activeFieldRef.current?.dataset.pointKey);
+    setPoints((current) => {
+      const target = current.find(({ key }) => key === activeKey) ?? current.at(-1)!;
+      return current.map((point) => (point === target ? { ...point, place } : point));
+    });
   }
 
-  function updateSavedPlaces(updated: SavedPlace[]) {
+  function savePlace(saved: SavedPlace) {
+    const updated = replaceSavedPlace(savedPlaces, saved);
     setSavedPlaces(updated);
     storeSavedPlaces(updated);
     setDialog(null);
   }
 
-  function savePlace(saved: SavedPlace) {
-    const others = savedPlaces.filter(({ name }) => name !== saved.name && name !== dialog?.name);
-    updateSavedPlaces([...others, saved]);
-  }
-
   return (
     <>
-      <div className="fixed inset-x-0 top-0 h-[48dvh]">
+      <div className={cn('fixed inset-x-0 top-0 h-[48dvh]', isExpanded && 'invisible')}>
         <RouteMap points={places} route={route} />
         <button
           type="button"
@@ -184,49 +223,61 @@ export default function Home() {
         </button>
       </div>
 
-      <main className="relative z-20 mx-auto mt-[calc(48dvh-1.5rem)] flex min-h-[calc(52dvh+1.5rem)] max-w-xl flex-col gap-4 rounded-t-3xl bg-background px-4 pt-5 pb-8">
-        <RoutePoints
-          points={points}
-          isLocating={isLocating}
-          near={first ?? undefined}
-          savedPlaces={savedPlaces}
-          onChange={setPoints}
-          onAdd={addStop}
-          onFirstFieldInput={() => {
-            hasTypedRef.current = true;
-          }}
-        />
+      <main
+        className={cn(
+          'relative z-20 mx-auto flex max-w-xl flex-col gap-4 bg-background px-4',
+          isExpanded
+            ? 'min-h-dvh pb-[70dvh]'
+            : 'mt-[calc(48dvh-1.5rem)] min-h-[calc(52dvh+1.5rem)] rounded-t-3xl pt-5 pb-8',
+        )}
+      >
+        {isExpanded && (
+          <div className="sticky top-0 z-20 -mx-4 bg-background px-2 py-2">
+            <button
+              type="button"
+              aria-label="Свернуть"
+              onClick={collapse}
+              className="flex size-10 items-center justify-center rounded-full hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <ArrowLeft className="size-5" />
+            </button>
+          </div>
+        )}
+
+        <div onFocus={handleFieldFocus}>
+          <RoutePoints
+            points={points}
+            isLocating={isLocating}
+            isExpanded={isExpanded}
+            near={first ?? undefined}
+            savedPlaces={savedPlaces}
+            onChange={setPoints}
+            onAdd={addStop}
+            onSave={(place) => setDialog({ place })}
+            onFirstFieldInput={() => {
+              hasTypedRef.current = true;
+            }}
+          />
+        </div>
 
         {locationError && <p className="text-sm text-destructive">{locationError}</p>}
 
-        {isLoading && (
+        {isLoading && !isExpanded && (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <LoaderCircle className="size-4 animate-spin" />
             Строим маршрут…
           </p>
         )}
 
-        {hasFailed && (
+        {hasFailed && !isExpanded && (
           <p className="text-sm text-destructive">
             Не удалось построить маршрут между этими адресами. Проверьте адреса или попробуйте позже.
           </p>
         )}
 
-        {route && (
+        {route && !isExpanded && (
           <>
-            <p className="text-sm font-medium">
-              {route.distanceKm.toFixed(1)} км · примерно {formatDuration(route.durationMin)} в пути
-            </p>
-            {unsavedPlace && (
-              <button
-                type="button"
-                onClick={() => setDialog({ place: unsavedPlace })}
-                className="-my-1 flex w-full items-center gap-2 rounded-lg py-1 text-left text-sm font-medium text-primary focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Bookmark className="size-4 shrink-0" />
-                <span className="truncate">Сохранить адрес: {unsavedPlace.title}</span>
-              </button>
-            )}
+            <RouteStats route={route} />
             {hasStops && (
               <p className="text-sm text-muted-foreground">
                 Остановки в заказ не передаются: добавьте их в приложении сервиса или скажите
@@ -241,13 +292,12 @@ export default function Home() {
           </>
         )}
 
-        {!route && !isLoading && (
+        {(isExpanded || (!route && !isLoading)) && (
           <>
-            {savedPlaces.length > 0 && (
+            {isExpanded && savedPlaces.length > 0 && (
               <SavedPlaces
                 places={savedPlaces}
-                onSelect={({ place }) => goTo(place)}
-                onEdit={setDialog}
+                onSelect={({ place }) => fillActiveField(place)}
                 onAdd={() => setDialog({ place: null })}
               />
             )}
@@ -259,17 +309,29 @@ export default function Home() {
             )}
           </>
         )}
+
+        {isExpanded && (
+          <div
+            className="fixed inset-x-0 z-[5] bg-background px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            style={{ bottom: keyboardInset }}
+          >
+            <button
+              type="button"
+              disabled={!routeKey}
+              onClick={collapse}
+              className="mx-auto block h-12 w-full max-w-xl rounded-xl bg-primary text-base font-semibold text-primary-foreground transition-opacity focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            >
+              Показать цены
+            </button>
+          </div>
+        )}
       </main>
 
       {dialog && (
         <PlaceDialog
-          initialName={dialog.name}
           initialPlace={dialog.place}
           places={savedPlaces}
           onSave={savePlace}
-          onDelete={() =>
-            updateSavedPlaces(savedPlaces.filter(({ name }) => name !== dialog.name))
-          }
           onClose={() => setDialog(null)}
         />
       )}
