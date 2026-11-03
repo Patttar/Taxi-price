@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type FocusEvent } from 'react';
-import { ArrowLeft, LoaderCircle, LocateFixed } from 'lucide-react';
+import { flushSync } from 'react-dom';
+import { LoaderCircle, LocateFixed } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import PlaceDialog from '@/components/PlaceDialog';
+import PlacesSheet from '@/components/PlacesSheet';
 import RouteHistory from '@/components/RouteHistory';
 import RouteMap from '@/components/RouteMap';
 import RoutePoints, { type RoutePoint } from '@/components/RoutePoints';
 import RouteStats from '@/components/RouteStats';
 import SavedPlaces from '@/components/SavedPlaces';
+import SheetHandle from '@/components/SheetHandle';
 import ServiceList from '@/components/ServiceList';
 import { fetchRoute, locateUser, type Place, type Route } from '@/lib/geo';
-import { getOffers } from '@/lib/prices';
+import { CITIES, findCity, getOffers } from '@/lib/prices';
 import { addToRouteHistory, getRecentRoutes, loadRouteHistory } from '@/lib/routeHistory';
 import {
   loadSavedPlaces,
@@ -19,6 +22,7 @@ import {
   type SavedPlace,
 } from '@/lib/savedPlaces';
 import { useKeyboardInset } from '@/lib/useKeyboardInset';
+import { useSwipeToClose } from '@/lib/useSwipeToClose';
 import { cn } from '@/lib/utils';
 
 type RouteResult = {
@@ -31,7 +35,7 @@ type DialogState = {
 };
 
 const HISTORY_DELAY_MS = 3000;
-const APPLY_BAR_HEIGHT = 76;
+const APPLY_BAR_ID = 'apply-bar';
 
 let nextPointKey = 0;
 
@@ -46,14 +50,26 @@ function getLocationError(error: GeolocationPositionError | Error) {
     : 'Не удалось определить местоположение. Попробуйте ещё раз.';
 }
 
-// Экран стоит в верхней точке, пока поле там видно над клавиатурой и кнопкой.
+const HEADER_HEIGHT = 40;
+
+// Положение без учёта сдвигов анимации: шторка ещё может выезжать, когда поле получает фокус.
+function getPageTop(element: HTMLElement) {
+  let top = 0;
+  for (let node: HTMLElement | null = element; node; node = node.offsetParent as HTMLElement | null) {
+    top += node.offsetTop;
+  }
+  return top;
+}
+
+// Экран стоит в верхней точке, пока поле там видно над клавиатурой и кнопкой «Показать цены».
 function revealField(field: HTMLElement | null) {
   if (!field?.contains(document.activeElement)) return;
 
-  const visibleHeight = (window.visualViewport?.height ?? window.innerHeight) - APPLY_BAR_HEIGHT;
-  const bottomFromTop = field.getBoundingClientRect().bottom + window.scrollY;
-  if (bottomFromTop <= visibleHeight) window.scrollTo(0, 0);
-  else field.scrollIntoView({ block: 'start' });
+  const applyBarHeight = document.getElementById(APPLY_BAR_ID)?.offsetHeight ?? 0;
+  const visibleHeight = (window.visualViewport?.height ?? window.innerHeight) - applyBarHeight;
+  const top = getPageTop(field);
+  if (top + field.offsetHeight <= visibleHeight) window.scrollTo(0, 0);
+  else window.scrollTo(0, top - HEADER_HEIGHT);
 }
 
 export default function Home() {
@@ -72,9 +88,16 @@ export default function Home() {
   const [savedPlaces, setSavedPlaces] = useState(loadSavedPlaces);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [sheetMotion, setSheetMotion] = useState<'sheet-up' | 'sheet-down' | null>(null);
+  const [isPlacesOpen, setIsPlacesOpen] = useState(false);
   const keyboardInset = useKeyboardInset();
   const hasTypedRef = useRef(false);
   const activeFieldRef = useRef<HTMLElement | null>(null);
+  // Смахнутая шторка доезжает ровно до своего места на главном экране, поэтому сворачиваем без анимации.
+  const { sheetRef, handleProps } = useSwipeToClose<HTMLElement>(
+    () => collapse(false),
+    () => `translateY(calc(48dvh - 2.25rem + ${window.scrollY}px))`,
+  );
 
   const places = useMemo(() => points.flatMap(({ place }) => (place ? [place] : [])), [points]);
   const first = points[0].place;
@@ -129,10 +152,12 @@ export default function Home() {
   const isLoading = routeKey !== '' && !isCurrent;
   const hasFailed = isCurrent && !route;
   const hasStops = places.length > 2;
+  const city = useMemo(() => (first ? findCity(first) : null), [first]);
   const offers = useMemo(
-    () => (route && first && last ? getOffers(route, first, last) : []),
-    [route, first, last],
+    () => (city && route && first && last ? getOffers(city, route, first, last) : []),
+    [city, route, first, last],
   );
+  const estimated = offers.filter(({ isEstimate }) => isEstimate).map(({ name }) => name);
   const recentRoutes = useMemo(() => getRecentRoutes(history), [history]);
 
   // Промежуточные варианты при перетаскивании и правке адресов в историю не попадают.
@@ -161,14 +186,16 @@ export default function Home() {
 
     const field = event.target.closest('li');
     activeFieldRef.current = field;
+    if (!isExpanded) setSheetMotion('sheet-up');
     setIsExpanded(true);
     // Поля встают на новое место только на следующем кадре после открытия шторки.
     requestAnimationFrame(() => requestAnimationFrame(() => revealField(field)));
   }
 
-  function collapse() {
+  function collapse(isAnimated = true) {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     activeFieldRef.current = null;
+    setSheetMotion(isAnimated ? 'sheet-down' : null);
     setIsExpanded(false);
     window.scrollTo(0, 0);
   }
@@ -184,8 +211,12 @@ export default function Home() {
       .finally(() => setIsLocating(false));
   }
 
+  // Новое поле сразу получает фокус и открывает шторку ввода. Фокус ставим синхронно в обработчике
+  // нажатия: иначе iPhone не покажет клавиатуру.
   function addStop() {
-    setPoints((current) => [...current.slice(0, -1), createPoint(), current.at(-1)!]);
+    const point = createPoint();
+    flushSync(() => setPoints((current) => [...current.slice(0, -1), point, current.at(-1)!]));
+    document.querySelector<HTMLInputElement>(`[data-point-key="${point.key}"] input`)?.focus();
   }
 
   function fillActiveField(place: Place) {
@@ -196,16 +227,19 @@ export default function Home() {
     });
   }
 
-  function savePlace(saved: SavedPlace) {
-    const updated = replaceSavedPlace(savedPlaces, saved);
+  function updateSavedPlaces(updated: SavedPlace[]) {
     setSavedPlaces(updated);
     storeSavedPlaces(updated);
+  }
+
+  function savePlace(saved: SavedPlace) {
+    updateSavedPlaces(replaceSavedPlace(savedPlaces, saved));
     setDialog(null);
   }
 
   return (
     <>
-      <div className={cn('fixed inset-x-0 top-0 h-[48dvh]', isExpanded && 'invisible')}>
+      <div className="fixed inset-x-0 top-0 h-[48dvh]">
         <RouteMap points={places} route={route} />
         <button
           type="button"
@@ -213,7 +247,7 @@ export default function Home() {
           title="Найти моё местоположение"
           disabled={isLocating}
           onClick={locate}
-          className="absolute right-3 bottom-9 z-10 flex size-12 items-center justify-center rounded-full bg-card text-primary shadow-md transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70"
+          className="absolute right-3 bottom-9 z-10 flex size-12 items-center justify-center rounded-full bg-card text-foreground shadow-md transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70"
         >
           {isLocating ? (
             <LoaderCircle className="size-5 animate-spin" />
@@ -223,24 +257,31 @@ export default function Home() {
         </button>
       </div>
 
+      {isExpanded && (
+        <div
+          aria-hidden
+          className="fixed inset-0 z-10 bg-black/50 animate-in fade-in-0 duration-300"
+          onClick={() => collapse()}
+        />
+      )}
+
       <main
+        ref={sheetRef}
+        onAnimationEnd={(event) => event.target === event.currentTarget && setSheetMotion(null)}
         className={cn(
-          'relative z-20 mx-auto flex max-w-xl flex-col gap-4 bg-background px-4',
+          'relative z-20 mx-auto flex max-w-xl flex-col gap-4 rounded-t-3xl bg-background px-4',
+          sheetMotion,
           isExpanded
-            ? 'min-h-dvh pb-[70dvh]'
-            : 'mt-[calc(48dvh-1.5rem)] min-h-[calc(52dvh+1.5rem)] rounded-t-3xl pt-5 pb-8',
+            ? 'mt-3 min-h-[calc(100dvh-0.75rem)] pb-[70dvh]'
+            : 'mt-[calc(48dvh-1.5rem)] min-h-[calc(52dvh+1.5rem)] pt-5 pb-8',
         )}
       >
         {isExpanded && (
-          <div className="sticky top-0 z-20 -mx-4 bg-background px-2 py-2">
-            <button
-              type="button"
-              aria-label="Свернуть"
-              onClick={collapse}
-              className="flex size-10 items-center justify-center rounded-full hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <ArrowLeft className="size-5" />
-            </button>
+          <div
+            {...handleProps}
+            className="sticky top-0 z-20 -mx-4 -mb-2 touch-none rounded-t-3xl bg-background px-4 pt-1.5 pb-1"
+          >
+            <SheetHandle label="Свернуть" onClick={() => collapse()} />
           </div>
         )}
 
@@ -253,7 +294,6 @@ export default function Home() {
             savedPlaces={savedPlaces}
             onChange={setPoints}
             onAdd={addStop}
-            onSave={(place) => setDialog({ place })}
             onFirstFieldInput={() => {
               hasTypedRef.current = true;
             }}
@@ -277,28 +317,38 @@ export default function Home() {
 
         {route && !isExpanded && (
           <>
-            <RouteStats route={route} />
-            {hasStops && (
+            <RouteStats route={route} cityName={city?.name} />
+            {hasStops && offers.length > 0 && (
               <p className="text-sm text-muted-foreground">
-                Остановки в заказ не передаются: добавьте их в приложении сервиса или скажите
-                диспетчеру. Ожидание на остановках в цене не учтено.
+                Остановки добавьте в заказ сами, ожидание в цене не учтено.
               </p>
             )}
-            <ServiceList offers={offers} />
-            <p className="text-xs text-muted-foreground">
-              Цены примерные. У Яндекс Go расчёт по опубликованному тарифу без «горячих часов», у
-              остальных условный: своих тарифов они не публикуют. Точную цену назовёт сервис.
-            </p>
+            {city ? (
+              <>
+                <ServiceList offers={offers} />
+                <p className="text-xs text-muted-foreground">
+                  Цены примерные, без «горячих часов».
+                  {estimated.length > 0 &&
+                    ` У ${estimated.join(' и ')} тариф условный: они его не публикуют.`}
+                </p>
+              </>
+            ) : (
+              <p className="rounded-2xl bg-muted p-4 text-sm text-muted-foreground">
+                Здесь мы пока не знаем цен такси. Сейчас считаем для городов:{' '}
+                {CITIES.map(({ name }) => name).join(', ')}.
+              </p>
+            )}
           </>
         )}
 
         {(isExpanded || (!route && !isLoading)) && (
           <>
-            {isExpanded && savedPlaces.length > 0 && (
+            {isExpanded && (
               <SavedPlaces
                 places={savedPlaces}
                 onSelect={({ place }) => fillActiveField(place)}
                 onAdd={() => setDialog({ place: null })}
+                onOpenAll={() => setIsPlacesOpen(true)}
               />
             )}
             {recentRoutes.length > 0 && (
@@ -310,22 +360,31 @@ export default function Home() {
           </>
         )}
 
-        {isExpanded && (
-          <div
-            className="fixed inset-x-0 z-[5] bg-background px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
-            style={{ bottom: keyboardInset }}
-          >
-            <button
-              type="button"
-              disabled={!routeKey}
-              onClick={collapse}
-              className="mx-auto block h-12 w-full max-w-xl rounded-xl bg-primary text-base font-semibold text-primary-foreground transition-opacity focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-            >
-              Показать цены
-            </button>
-          </div>
-        )}
       </main>
+
+      {isExpanded && routeKey && (
+        <div
+          id={APPLY_BAR_ID}
+          className="fixed inset-x-0 z-30 bg-background px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] animate-in fade-in-0 slide-in-from-bottom-4"
+          style={{ bottom: keyboardInset }}
+        >
+          <button
+            type="button"
+            onClick={() => collapse()}
+            className="mx-auto block h-12 w-full max-w-xl rounded-xl bg-primary text-base font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Показать цены
+          </button>
+        </div>
+      )}
+
+      {isPlacesOpen && (
+        <PlacesSheet
+          places={savedPlaces}
+          onChange={updateSavedPlaces}
+          onClose={() => setIsPlacesOpen(false)}
+        />
+      )}
 
       {dialog && (
         <PlaceDialog

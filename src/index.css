@@ -6,26 +6,28 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.24 0.02 265);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.24 0.02 265);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.24 0.02 265);
-  --primary: oklch(0.52 0.17 272);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0.005 270);
-  --secondary-foreground: oklch(0.24 0.02 265);
-  --muted: oklch(0.975 0.005 270);
-  --muted-foreground: oklch(0.5 0.02 265);
-  --accent: oklch(0.96 0.02 275);
-  --accent-foreground: oklch(0.52 0.17 272);
-  --destructive: oklch(0.577 0.245 27.325);
-  --success: oklch(0.5 0.11 155);
-  --success-soft: oklch(0.96 0.03 155);
-  --border: oklch(0.93 0.008 270);
-  --input: oklch(0.93 0.008 270);
-  --ring: oklch(0.52 0.17 272);
+  /* Лайм Pantone 389C. Он светлый, поэтому текст на нём чёрный,
+     а для текста и значков на белом фоне есть тёмный оттенок того же зелёного. */
+  --background: #ffffff;
+  --foreground: #17181a;
+  --card: #ffffff;
+  --card-foreground: #17181a;
+  --popover: #ffffff;
+  --popover-foreground: #17181a;
+  --primary: #dcff00;
+  --primary-foreground: #17181a;
+  --secondary: #f3f4f0;
+  --secondary-foreground: #17181a;
+  --muted: #f3f4f0;
+  --muted-foreground: #696c63;
+  --accent: #f1fbc4;
+  --accent-foreground: #3f5a00;
+  --destructive: #d93b3b;
+  --success: #1e9a4b;
+  --success-soft: #e6f6ea;
+  --border: #e5e7e0;
+  --input: #e5e7e0;
+  --ring: #7fa300;
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -129,4 +131,33 @@
   right: auto !important;
   bottom: 0 !important;
   left: 0 !important;
+}
+/* Шторка ввода адресов выезжает со своего места на главном экране и возвращается туда же. */
+@keyframes sheet-up {
+  from {
+    transform: translateY(calc(48dvh - 2.25rem));
+  }
+}
+
+@keyframes sheet-down {
+  from {
+    transform: translateY(calc(2.25rem - 48dvh));
+  }
+}
+
+.sheet-up {
+  animation: sheet-up 300ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.sheet-down {
+  animation: sheet-down 300ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }

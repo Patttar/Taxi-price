@@ -46,21 +46,27 @@ const STREET_CENTER_NOTE = 'Без точного дома: точка стои�
 const BREST = 'Брест';
 const REGION_NAME = 'Брестская область';
 
-const Rank = { Town: 0, BrestStreet: 1, BrestPlace: 2, RegionStreet: 3, Village: 4 };
+const Rank = { Town: 0, BrestStreet: 1, BrestPlace: 2, Poi: 2, RegionStreet: 3, Village: 4 };
+const WORD_SEPARATORS = /[\s,\-«»"().]+/;
 
 type LocalPlace = Coordinates & {
   name: string;
   rank: number;
   subtitle: string;
   city?: string;
+  // Для заведений: по чему ещё искать (категория, сокращение вроде «бц»).
+  extraWords?: string;
   words: string[];
 };
+
+// [название, широта, долгота, категория, адрес, город, сокращение] — см. scripts/build-pois.mjs.
+type PoiRow = [string, number, number, string, string, string, string];
 
 type RegionPlace = Coordinates & { name: string; kind: string; city?: string };
 
 function toLocalPlace(place: Omit<LocalPlace, 'words'>): LocalPlace {
-  const text = normalize(`${place.city ?? ''} ${place.name}`);
-  return { ...place, words: text.split(/[\s\-«»"().,]+/).filter(Boolean) };
+  const text = normalize(`${place.city ?? ''} ${place.name} ${place.extraWords ?? ''}`);
+  return { ...place, words: text.split(WORD_SEPARATORS).filter(Boolean) };
 }
 
 // Названия городов в источнике белорусские, по-русски они не находятся.
@@ -94,12 +100,29 @@ function regionToLocalPlace({ name, lat, lon, kind, city }: RegionPlace) {
   return toLocalPlace({ name, lat, lon, rank, subtitle: REGION_NAME });
 }
 
-// Справочник области большой, поэтому грузим его только при первом поиске.
+const curatedNames = new Set(brestPlaces.filter(({ isStreet }) => !isStreet).map(({ name }) => name));
+
+function poiToLocalPlace([name, lat, lon, category, address, city, alias]: PoiRow) {
+  const location = address ? (city === BREST ? address : `${city}, ${address}`) : city;
+  return toLocalPlace({
+    name,
+    lat,
+    lon,
+    rank: Rank.Poi,
+    subtitle: [category, location].filter(Boolean).join(' · '),
+    extraWords: `${category} ${alias}`,
+  });
+}
+
+// Справочники области и заведений большие, поэтому грузим их только при первом поиске.
 function loadLocalPlaces() {
-  localPlaces ??= import('@/data/brest-region.json').then(({ default: region }) => [
-    ...nearbyPlaces,
-    ...(region as RegionPlace[]).map(regionToLocalPlace),
-  ]);
+  localPlaces ??= Promise.all([import('@/data/brest-region.json'), import('@/data/pois.json')]).then(
+    ([{ default: region }, { default: pois }]) => [
+      ...nearbyPlaces,
+      ...(pois as PoiRow[]).filter(([name]) => !curatedNames.has(name)).map(poiToLocalPlace),
+      ...(region as RegionPlace[]).map(regionToLocalPlace),
+    ],
+  );
   return localPlaces;
 }
 
@@ -123,7 +146,7 @@ function getTitle({ name, city }: LocalPlace, number?: string) {
 
 async function searchLocal(query: string, near: Coordinates): Promise<Place[]> {
   const places = await loadLocalPlaces();
-  const tokens = normalize(query).split(/[\s,]+/).filter(Boolean);
+  const tokens = normalize(query).split(WORD_SEPARATORS).filter(Boolean);
   const number = tokens.length > 1 && HOUSE_NUMBER.test(tokens.at(-1)!) ? tokens.pop() : undefined;
 
   return places
@@ -132,10 +155,18 @@ async function searchLocal(query: string, near: Coordinates): Promise<Place[]> {
         (!number || rank === Rank.BrestStreet || rank === Rank.RegionStreet) &&
         tokens.every((token) => words.some((word) => word.startsWith(token))),
     )
+    .map((place) => ({
+      place,
+      // «IQ» точнее совпадает с «Бизнес-центр IQ», чем с «IQOS».
+      isExact: tokens.every((token) => place.words.includes(token)),
+    }))
     .sort(
       (a, b) =>
-        a.rank - b.rank || getSquaredDistance(a, near) - getSquaredDistance(b, near),
+        a.place.rank - b.place.rank ||
+        Number(b.isExact) - Number(a.isExact) ||
+        getSquaredDistance(a.place, near) - getSquaredDistance(b.place, near),
     )
+    .map(({ place }) => place)
     .slice(0, SUGGESTION_LIMIT)
     .map((place) => {
       const { name, lat, lon, city, subtitle } = place;

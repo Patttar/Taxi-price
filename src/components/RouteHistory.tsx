@@ -59,10 +59,10 @@ export default function RouteHistory({ routes, onSelect }: Props) {
       <Link
         to="/history"
         aria-label="Все маршруты"
-        className="flex items-center justify-between gap-3 rounded-lg px-4 py-1.5 text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex items-center justify-between gap-3 rounded-lg px-4 py-1.5 focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <h2 className="text-sm">Недавние маршруты</h2>
-        <ChevronRight className="size-5 shrink-0" />
+        <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Недавние маршруты</h2>
+        <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
       </Link>
       <ul className="flex flex-col">
         {routes.map((route) => (

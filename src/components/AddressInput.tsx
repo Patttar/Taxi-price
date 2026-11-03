@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Bookmark, LoaderCircle, Plus, X, type LucideIcon } from 'lucide-react';
+import { LoaderCircle, Plus, X, type LucideIcon } from 'lucide-react';
 
 import { normalize, resolvePlace, searchPlaces, type Coordinates, type Place } from '@/lib/geo';
 import { getPlaceIcon, type SavedPlace } from '@/lib/savedPlaces';
@@ -15,7 +15,6 @@ type Props = {
   place: Place | null;
   near?: Coordinates;
   savedPlaces?: SavedPlace[];
-  onSave?: () => void;
   onAdd?: () => void;
   onChange: (place: Place | null) => void;
 };
@@ -63,7 +62,7 @@ function FieldButton({ label, onClick, children }: FieldButtonProps) {
         event.preventDefault();
         onClick();
       }}
-      className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
     >
       {children}
     </button>
@@ -77,7 +76,6 @@ export default function AddressInput({
   place,
   near,
   savedPlaces = [],
-  onSave,
   onAdd,
   onChange,
 }: Props) {
@@ -190,7 +188,7 @@ export default function AddressInput({
     <div className="relative">
       <label
         htmlFor={id}
-        className="flex items-center gap-2.5 rounded-2xl bg-muted px-4 py-2.5 ring-primary/40 transition-shadow focus-within:ring-2"
+        className="flex items-center gap-2.5 rounded-2xl bg-muted px-4 py-2.5 ring-ring/50 transition-shadow focus-within:ring-2"
       >
         {icon}
         <span className="min-w-0 flex-1">
@@ -225,11 +223,6 @@ export default function AddressInput({
           <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" />
         )}
         <span className="-mr-2 flex shrink-0 empty:hidden">
-          {place && onSave && (
-            <FieldButton label={`Сохранить адрес из поля «${label}»`} onClick={onSave}>
-              <Bookmark className="size-5" />
-            </FieldButton>
-          )}
           {place && onAdd && (
             <FieldButton label="Добавить остановку" onClick={onAdd}>
               <Plus className="size-5" />
@@ -249,7 +242,7 @@ export default function AddressInput({
         <ul
           id={listId}
           role="listbox"
-          className="absolute inset-x-0 top-full z-50 mt-1 max-h-72 overflow-y-auto rounded-2xl border bg-popover py-1 shadow-lg"
+          className="absolute inset-x-0 top-full z-50 mt-1 max-h-72 origin-top overflow-y-auto rounded-2xl border bg-popover py-1 shadow-lg animate-in fade-in-0 zoom-in-[0.98] slide-in-from-top-1 duration-150"
         >
           {options.map((option, index) => (
             <li
@@ -264,7 +257,7 @@ export default function AddressInput({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => select(option)}
             >
-              {option.icon && <option.icon className="size-5 shrink-0 text-primary" />}
+              {option.icon && <option.icon className="size-5 shrink-0 text-accent-foreground" />}
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">{option.title}</div>
                 {option.subtitle && (

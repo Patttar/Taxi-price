@@ -1,4 +1,4 @@
-import { Clock, Route as RouteIcon, type LucideIcon } from 'lucide-react';
+import { Clock, MapPin, Route as RouteIcon } from 'lucide-react';
 
 import type { Route } from '@/lib/geo';
 
@@ -12,25 +12,23 @@ function formatDuration(minutes: number) {
   return hours > 0 ? `${hours} ч ${rounded % 60} мин` : `${rounded} мин`;
 }
 
-function Stat({ icon: Icon, value, label }: { icon: LucideIcon; value: string; label: string }) {
+// Второстепенная строка: город, по тарифам которого считаем, расстояние и время.
+export default function RouteStats({ route, cityName }: { route: Route; cityName?: string }) {
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-card text-primary">
-        <Icon className="size-5" />
+    <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+      {cityName && (
+        <span className="flex items-center gap-1.5">
+          <MapPin className="size-4" />
+          {cityName}
+        </span>
+      )}
+      <span className="flex items-center gap-1.5">
+        <RouteIcon className="size-4" />
+        {formatDistance(route.distanceKm)}
       </span>
-      <span className="min-w-0">
-        <span className="block truncate text-lg leading-tight font-bold">{value}</span>
-        <span className="block text-xs text-muted-foreground">{label}</span>
+      <span className="flex items-center gap-1.5">
+        <Clock className="size-4" />≈ {formatDuration(route.durationMin)}
       </span>
-    </div>
-  );
-}
-
-export default function RouteStats({ route }: { route: Route }) {
-  return (
-    <div className="flex divide-x divide-card rounded-2xl bg-accent">
-      <Stat icon={RouteIcon} value={formatDistance(route.distanceKm)} label="расстояние" />
-      <Stat icon={Clock} value={`≈ ${formatDuration(route.durationMin)}`} label="в пути" />
-    </div>
+    </p>
   );
 }

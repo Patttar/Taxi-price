@@ -54,7 +54,7 @@ export default function History() {
         <h1 className="text-lg font-semibold">История маршрутов</h1>
       </header>
 
-      <label className="flex items-center gap-3 rounded-2xl bg-muted px-4 py-3 ring-primary/40 focus-within:ring-2">
+      <label className="flex items-center gap-3 rounded-2xl bg-muted px-4 py-3 ring-ring/50 focus-within:ring-2">
         <Search className="size-5 shrink-0 text-muted-foreground" />
         <input
           type="text"
@@ -69,7 +69,7 @@ export default function History() {
             type="button"
             aria-label="Очистить поиск"
             onClick={() => setQuery('')}
-            className="-mr-2 flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+            className="-mr-2 flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="size-5" />
           </button>

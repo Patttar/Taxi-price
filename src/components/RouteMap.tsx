@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_LOCATION, type Place, type Route } from '@/lib/geo';
 import { loadYandexMaps } from '@/lib/yandexMaps';
 
-const FROM_COLOR = '#2e9e5f';
+const FROM_COLOR = '#1e9a4b';
 const TO_COLOR = '#e5484d';
-const ROUTE_COLOR = '#4f5bd5';
+const ROUTE_COLOR = '#dcff00';
+const ROUTE_OUTLINE_COLOR = '#17181a';
 const SINGLE_POINT_ZOOM = 15;
 
 type Props = {
@@ -54,7 +55,11 @@ export default function RouteMap({ points, route }: Props) {
 
     if (route) {
       map.geoObjects.add(
-        new ymaps.Polyline(route.path, {}, { strokeColor: ROUTE_COLOR, strokeWidth: 5, strokeOpacity: 0.9 }),
+        new ymaps.Polyline(route.path, {}, {
+          // Лаймовая линия без обводки теряется на жёлтых дорогах карты.
+          strokeColor: [ROUTE_OUTLINE_COLOR, ROUTE_COLOR],
+          strokeWidth: [8, 4],
+        }),
       );
     }
 
@@ -65,7 +70,7 @@ export default function RouteMap({ points, route }: Props) {
           [place.lat, place.lon],
           isStop ? { iconContent: index } : {},
           isStop
-            ? { preset: 'islands#circleIcon', iconColor: ROUTE_COLOR }
+            ? { preset: 'islands#circleIcon', iconColor: ROUTE_OUTLINE_COLOR }
             : {
                 preset: 'islands#circleDotIcon',
                 iconColor: index === 0 ? FROM_COLOR : TO_COLOR,

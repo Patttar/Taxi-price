@@ -39,10 +39,6 @@ export function loadSavedPlaces(): SavedPlace[] {
   }
 }
 
-export function isPlaceSaved(places: SavedPlace[], { lat, lon }: Place) {
-  return places.some(({ place }) => place.lat === lat && place.lon === lon);
-}
-
 export function replaceSavedPlace(
   places: SavedPlace[],
   saved: SavedPlace,

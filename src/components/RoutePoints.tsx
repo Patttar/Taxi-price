@@ -1,13 +1,52 @@
-import { Reorder, useDragControls } from 'framer-motion';
+import { useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { Reorder, useDragControls, type DragControls } from 'framer-motion';
 import { GripVertical, MapPin, Trash2 } from 'lucide-react';
 
 import AddressInput from '@/components/AddressInput';
 import type { Coordinates, Place } from '@/lib/geo';
-import { isPlaceSaved, type SavedPlace } from '@/lib/savedPlaces';
+import type { SavedPlace } from '@/lib/savedPlaces';
+import { cn } from '@/lib/utils';
 
 export type RoutePoint = { key: number; place: Place | null };
 
 const MAX_POINTS = 5;
+const LONG_PRESS_MS = 350;
+const PRESS_TOLERANCE = 8;
+
+// Мышью тянут сразу. Пальцем — после долгого нажатия, чтобы случайное касание при прокрутке не двигало поля.
+function startDrag(event: ReactPointerEvent, controls: DragControls, onLift: (isLifted: boolean) => void) {
+  if (event.pointerType === 'mouse') {
+    controls.start(event);
+    return;
+  }
+
+  const startX = event.clientX;
+  const startY = event.clientY;
+  let lastEvent: PointerEvent = event.nativeEvent;
+
+  function cleanup() {
+    clearTimeout(timer);
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', cleanup);
+    window.removeEventListener('pointercancel', cleanup);
+  }
+
+  function move(moveEvent: PointerEvent) {
+    lastEvent = moveEvent;
+    if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) > PRESS_TOLERANCE) cleanup();
+  }
+
+  const timer = setTimeout(() => {
+    cleanup();
+    navigator.vibrate?.(15);
+    onLift(true);
+    controls.start(lastEvent);
+  }, LONG_PRESS_MS);
+
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', cleanup);
+  window.addEventListener('pointercancel', cleanup);
+}
 
 type RowProps = {
   point: RoutePoint;
@@ -21,7 +60,6 @@ type RowProps = {
   onMove: (shift: number) => void;
   onRemove: () => void;
   onAdd?: () => void;
-  onSave: (place: Place) => void;
   onFirstFieldInput: () => void;
 };
 
@@ -40,7 +78,7 @@ function PointIcon({ index, count }: { index: number; count: number }) {
   if (index === count - 1) return <MapPin className="size-5 shrink-0 text-destructive" />;
 
   return (
-    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-xs font-semibold text-primary">
       {index}
     </span>
   );
@@ -58,10 +96,10 @@ function PointRow({
   onMove,
   onRemove,
   onAdd,
-  onSave,
   onFirstFieldInput,
 }: RowProps) {
   const controls = useDragControls();
+  const [isLifted, setIsLifted] = useState(false);
   const label = getLabel(index, count);
   const { place } = point;
   const hasManyPoints = count > 2;
@@ -75,7 +113,12 @@ function PointRow({
       // Анимация сдвига при открытии шторки сбивает прокрутку к полю.
       transition={{ layout: { duration: isExpanded ? 0 : 0.2 } }}
       data-point-key={point.key}
-      className="flex scroll-mt-16 items-start gap-1 bg-background"
+      onDragEnd={() => setIsLifted(false)}
+      animate={{ scale: isLifted ? 1.03 : 1 }}
+      className={cn(
+        'flex scroll-mt-10 items-start gap-1 rounded-2xl bg-background',
+        isLifted && 'relative z-10 shadow-lg',
+      )}
     >
       <div className="min-w-0 flex-1" onInput={index === 0 ? onFirstFieldInput : undefined}>
         <AddressInput
@@ -88,14 +131,16 @@ function PointRow({
                   type="button"
                   aria-label={`Переместить: ${label}`}
                   title="Перетащите, чтобы поменять порядок"
-                  onPointerDown={(event) => controls.start(event)}
+                  onPointerDown={(event) => startDrag(event, controls, setIsLifted)}
+                  onPointerUp={() => setIsLifted(false)}
+                  onContextMenu={(event) => event.preventDefault()}
                   onKeyDown={(event) => {
                     if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
                       event.preventDefault();
                       onMove(event.key === 'ArrowUp' ? -1 : 1);
                     }
                   }}
-                  className="-my-2.5 -mr-1.5 -ml-2.5 flex w-6 shrink-0 cursor-grab touch-none items-center justify-center self-stretch rounded-lg text-muted-foreground/60 active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring"
+                  className="-my-2.5 -mr-1.5 -ml-2.5 flex w-6 shrink-0 cursor-grab touch-none items-center select-none [-webkit-touch-callout:none] justify-center self-stretch rounded-lg text-muted-foreground/60 active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <GripVertical className="size-4" />
                 </button>
@@ -106,7 +151,6 @@ function PointRow({
           place={place}
           near={near}
           savedPlaces={savedPlaces}
-          onSave={place && !isPlaceSaved(savedPlaces, place) ? () => onSave(place) : undefined}
           onAdd={onAdd}
           onChange={onChange}
         />
@@ -135,7 +179,6 @@ type Props = {
   savedPlaces: SavedPlace[];
   onChange: (points: RoutePoint[]) => void;
   onAdd: () => void;
-  onSave: (place: Place) => void;
   onFirstFieldInput: () => void;
 };
 
@@ -147,7 +190,6 @@ export default function RoutePoints({
   savedPlaces,
   onChange,
   onAdd,
-  onSave,
   onFirstFieldInput,
 }: Props) {
   function move(index: number, shift: number) {
@@ -185,7 +227,6 @@ export default function RoutePoints({
           onMove={(shift) => move(index, shift)}
           onRemove={() => onChange(points.filter((item) => item !== point))}
           onAdd={index === points.length - 1 && points.length < MAX_POINTS ? onAdd : undefined}
-          onSave={onSave}
           onFirstFieldInput={onFirstFieldInput}
         />
       ))}

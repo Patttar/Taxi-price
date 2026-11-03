@@ -3,9 +3,12 @@ import { MapPin } from 'lucide-react';
 import { Dialog } from 'radix-ui';
 
 import AddressInput from '@/components/AddressInput';
+import SheetHandle from '@/components/SheetHandle';
 import type { Place } from '@/lib/geo';
 import { PLACE_PRESETS, type SavedPlace } from '@/lib/savedPlaces';
 import { useKeyboardInset } from '@/lib/useKeyboardInset';
+import { SHEET_CONTENT_ANIMATION, SHEET_OVERLAY_ANIMATION, useClosingSheet } from '@/lib/useClosingSheet';
+import { useSwipeToClose } from '@/lib/useSwipeToClose';
 import { cn } from '@/lib/utils';
 
 const MAX_NAME_LENGTH = 24;
@@ -30,6 +33,8 @@ export default function PlaceDialog({
   const [place, setPlace] = useState(initialPlace);
   const [name, setName] = useState(initialName);
   const keyboardInset = useKeyboardInset();
+  const { isOpen, close, onAnimationEnd } = useClosingSheet(onClose);
+  const { sheetRef, handleProps } = useSwipeToClose<HTMLDivElement>(onClose);
 
   const trimmedName = name.trim();
   const isPreset = PLACE_PRESETS.some((preset) => preset.name === name);
@@ -37,25 +42,32 @@ export default function PlaceDialog({
     trimmedName !== initialName && places.some((saved) => saved.name === trimmedName);
 
   return (
-    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && close()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/50 animate-in fade-in-0" />
+        <Dialog.Overlay className={cn('fixed inset-0 z-50 bg-black/50', SHEET_OVERLAY_ANIMATION)} />
         <Dialog.Content
+          ref={sheetRef}
           aria-describedby={undefined}
           style={{ bottom: keyboardInset }}
+          onAnimationEnd={onAnimationEnd}
           onOpenAutoFocus={(event) => initialPlace && event.preventDefault()}
           onCloseAutoFocus={(event) => event.preventDefault()}
-          className="fixed inset-x-0 z-50 mx-auto flex max-h-[90dvh] max-w-xl flex-col gap-4 rounded-t-3xl bg-background px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-lg animate-in slide-in-from-bottom duration-200"
+          className={cn(
+            'fixed inset-x-0 z-50 mx-auto flex max-h-[90dvh] max-w-xl flex-col gap-4 rounded-t-3xl bg-background px-5 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-lg',
+            SHEET_CONTENT_ANIMATION,
+          )}
         >
-          <div aria-hidden className="mx-auto h-1 w-10 shrink-0 rounded-full bg-border" />
-          <Dialog.Title className="text-lg font-semibold">
-            {initialName ? 'Изменить адрес' : 'Сохранить адрес'}
-          </Dialog.Title>
+          <div {...handleProps} className="-mx-5 -mb-2 touch-none px-5 pb-2">
+            <SheetHandle label="Закрыть" onClick={() => close()} />
+            <Dialog.Title className="text-lg font-semibold">
+              {initialName ? 'Изменить адрес' : 'Сохранить адрес'}
+            </Dialog.Title>
+          </div>
 
           <AddressInput
             label="Адрес"
             placeholder="Улица и дом"
-            icon={<MapPin className="size-5 shrink-0 text-primary" />}
+            icon={<MapPin className="size-5 shrink-0 text-accent-foreground" />}
             place={place}
             onChange={setPlace}
           />
@@ -84,7 +96,7 @@ export default function PlaceDialog({
             placeholder="Или своё название"
             aria-label="Своё название"
             onChange={(event) => setName(event.target.value)}
-            className="rounded-2xl bg-muted px-4 py-3 text-base outline-none ring-primary/40 focus:ring-2"
+            className="rounded-2xl bg-muted px-4 py-3 text-base outline-none ring-ring/50 focus:ring-2"
           />
 
           {willReplace && (
@@ -97,7 +109,7 @@ export default function PlaceDialog({
             {initialName && (
               <button
                 type="button"
-                onClick={onDelete}
+                onClick={() => onDelete && close(onDelete)}
                 className="h-11 rounded-xl px-4 text-sm font-semibold text-destructive hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Удалить
@@ -106,7 +118,7 @@ export default function PlaceDialog({
             <button
               type="button"
               disabled={!place || !trimmedName}
-              onClick={() => place && onSave({ name: trimmedName, place })}
+              onClick={() => place && close(() => onSave({ name: trimmedName, place }))}
               className="h-11 flex-1 rounded-xl bg-primary text-sm font-semibold text-primary-foreground transition-opacity focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
               Сохранить
